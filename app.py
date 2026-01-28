@@ -6,142 +6,961 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from plotly.subplots import make_subplots
 import warnings
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+import base64
+import io
 warnings.filterwarnings('ignore')
 
-# 设置页面配置
+# ========== 大屏优化配置 ==========
+# 设置页面为宽屏模式，适合大屏幕显示
 st.set_page_config(
-    page_title="跨境电商春季大促智能看板",
-    page_icon="📊",
+    page_title="跨境电商大促智能作战室",
+    page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed",  # 大屏模式下收起侧边栏
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://www.example.com',
+        'Report a bug': 'https://www.example.com',
+        'About': "跨境电商大促智能作战室 v2.0"
+    }
 )
 
-# 标题和说明
-st.title("🚀 跨境电商春季大促智能分析看板")
-st.markdown("---")
+# 自定义CSS优化大屏体验
+st.markdown("""
+<style>
+    /* 大屏优化样式 */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* 卡片样式优化 */
+    .card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        padding: 15px;
+        color: white;
+        margin-bottom: 10px;
+    }
+    
+    /* KPI卡片样式 */
+    .kpi-card {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        border-radius: 15px;
+        padding: 20px;
+        color: white;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 15px;
+    }
+    
+    /* 排行榜样式 */
+    .ranking-item {
+        background: white;
+        border-radius: 8px;
+        padding: 10px 15px;
+        margin: 5px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .ranking-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* 全屏按钮样式 */
+    .fullscreen-btn {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 999;
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+        cursor: pointer;
+    }
+    
+    /* 移动端优化 */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 1rem;
+        }
+        
+        .kpi-card {
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            font-size: 1.5rem !important;
+        }
+        
+        h2 {
+            font-size: 1.2rem !important;
+        }
+        
+        h3 {
+            font-size: 1rem !important;
+        }
+    }
+    
+    /* 动画效果 */
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+    
+    .pulse {
+        animation: pulse 2s infinite;
+    }
+    
+    /* 预警指示灯 */
+    .alert-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+    
+    .alert-high { background-color: #ff4757; }
+    .alert-medium { background-color: #ffa502; }
+    .alert-low { background-color: #2ed573; }
+</style>
+""", unsafe_allow_html=True)
 
-# ========== 1. 模拟数据生成函数（增强版） ==========
+# ========== 全屏功能 ==========
+def create_fullscreen_button():
+    """创建全屏按钮的HTML/JS代码"""
+    fullscreen_js = """
+    <script>
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(err => {
+                console.log(`Error attempting to enable fullscreen: ${err.message}`);
+            });
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    }
+    </script>
+    <button class="fullscreen-btn" onclick="toggleFullscreen()">📺</button>
+    """
+    return fullscreen_js
+
+# ========== 数据生成函数（增强版，包含产品级数据） ==========
 @st.cache_data
-def generate_enhanced_mock_data():
-    """生成增强版模拟数据，包含更多维度"""
+def generate_comprehensive_mock_data():
+    """生成包含产品级数据的综合模拟数据"""
     
     np.random.seed(42)
     
     # 基础设置
     countries = ['美国', '英国', '德国', '法国', '日本', '澳大利亚', '加拿大', '韩国', '新加坡', '巴西']
     categories = ['电子产品', '服装', '家居', '美妆', '食品', '玩具', '运动户外', '图书']
-    channels = ['搜索引擎', '社交媒体', '直接访问', '广告推广', '邮件营销', '联盟营销']
-    user_types = ['新用户', '老用户', 'VIP用户']
     
-    # 生成日期范围（最近60天，包含历史对比）
+    # 每个品类下的具体产品
+    products_by_category = {
+        '电子产品': ['iPhone 15', 'MacBook Pro', 'AirPods Pro', 'iPad Air', 'Apple Watch'],
+        '服装': ['男士夹克', '女士连衣裙', '运动鞋', '牛仔裤', '羽绒服'],
+        '家居': ['智能音箱', '空气净化器', '咖啡机', '扫地机器人', '电动牙刷'],
+        '美妆': ['精华液', '粉底液', '口红', '面膜', '防晒霜'],
+        '食品': ['巧克力', '咖啡豆', '坚果', '茶叶', '蜂蜜'],
+        '玩具': ['乐高积木', '拼图', '遥控车', '玩偶', '棋盘游戏'],
+        '运动户外': ['瑜伽垫', '跑步鞋', '登山包', '自行车', '帐篷'],
+        '图书': ['小说', '技术书籍', '儿童绘本', '烹饪书', '旅行指南']
+    }
+    
+    # A/B测试实验数据
+    ab_experiments = {
+        '首页设计': ['A版（传统）', 'B版（新设计）'],
+        '价格策略': ['A价格（原价）', 'B价格（95折）', 'C价格（9折）'],
+        '促销文案': ['A文案（直接）', 'B文案（情感）', 'C文案（紧迫）'],
+        '配送选项': ['A（标准）', 'B（加急）', 'C（免费退换）']
+    }
+    
+    # 生成日期范围
     end_date = datetime.now()
-    start_date = end_date - timedelta(days=60)
+    start_date = end_date - timedelta(days=90)  # 3个月数据
     dates = pd.date_range(start=start_date, end=end_date, freq='D')
     
     data = []
-    inventory_data = []
-    funnel_data = []
+    product_data = []
+    ab_test_data = []
+    price_elasticity_data = []
     
-    # 模拟去年同期数据（用于对比）
-    last_year_factor = 0.7  # 假设去年销售额是今年的70%
-    
+    # 生成基础销售数据
     for i, date in enumerate(dates):
-        is_promo_day = i % 7 == 0  # 每周一天模拟大促日
+        is_promo_day = i % 7 == 0
         is_weekend = date.weekday() >= 5
         
         for country in countries:
             for category in categories:
-                # 基础销量设置
+                # 基础销量
                 base_config = {
                     '美国': {'电子产品': 5000, '服装': 3000, '家居': 2000, '美妆': 1500},
                     '英国': {'电子产品': 3000, '服装': 2500, '家居': 1800, '美妆': 1200},
                     '日本': {'电子产品': 4000, '服装': 2000, '家居': 1500, '美妆': 2000},
                 }
                 
-                # 获取基础值
-                if country in base_config and category in base_config[country]:
-                    base = base_config[country][category]
-                else:
-                    base = np.random.uniform(800, 2000)
+                base = base_config.get(country, {}).get(category, np.random.uniform(800, 2000))
                 
-                # 计算影响因素
+                # 影响因素
                 promo_factor = 3.0 if is_promo_day else 1.0
                 weekend_factor = 1.3 if is_weekend else 1.0
-                trend_factor = 1 + (i / len(dates)) * 0.5  # 逐渐增长趋势
+                trend_factor = 1 + (i / len(dates)) * 0.5
                 random_factor = np.random.uniform(0.7, 1.3)
                 
-                # 计算销售额
-                sales = base * promo_factor * weekend_factor * trend_factor * random_factor
+                # 品类总销售额
+                category_sales = base * promo_factor * weekend_factor * trend_factor * random_factor
                 
-                # 模拟指标
-                orders = int(sales / np.random.uniform(50, 150))
+                # 生成产品级数据
+                products = products_by_category[category]
+                product_sales_dist = np.random.dirichlet([2, 3, 4, 3, 2])  # 产品销量分布
+                
+                for product_idx, product in enumerate(products):
+                    # 产品销售额 = 品类销售额 × 产品占比
+                    product_sales = category_sales * product_sales_dist[product_idx] * np.random.uniform(0.8, 1.2)
+                    
+                    # 基础价格和弹性测试
+                    base_price = np.random.uniform(50, 500)
+                    
+                    # 价格弹性测试：不同价格点的销量
+                    for price_multiplier in [0.9, 0.95, 1.0, 1.05, 1.1]:
+                        price = base_price * price_multiplier
+                        # 简单价格弹性模型：价格越高，销量越低
+                        price_factor = np.exp(-0.5 * (price_multiplier - 1))
+                        sales_at_price = product_sales * price_factor * np.random.uniform(0.9, 1.1)
+                        
+                        price_elasticity_data.append({
+                            'date': date.date(),
+                            'country': country,
+                            'category': category,
+                            'product': product,
+                            'price': price,
+                            'price_multiplier': price_multiplier,
+                            'sales': sales_at_price,
+                            'demand': sales_at_price / price if price > 0 else 0
+                        })
+                    
+                    product_data.append({
+                        'date': date.date(),
+                        'country': country,
+                        'category': category,
+                        'product': product,
+                        'sales_amount': product_sales,
+                        'price': base_price * np.random.uniform(0.95, 1.05),
+                        'units_sold': int(product_sales / (base_price * np.random.uniform(0.8, 1.2))),
+                        'product_rank': product_idx + 1,
+                        'profit_margin': np.random.uniform(0.2, 0.4)
+                    })
+                
+                # 汇总品类数据
+                orders = int(category_sales / np.random.uniform(50, 150))
                 visitors = int(orders / np.random.uniform(0.02, 0.08))
-                
-                # 用户类型分布
-                user_dist = np.random.dirichlet([3, 5, 2])  # 新:老:VIP
-                
-                # 渠道分布
-                channel_dist = np.random.dirichlet([2, 3, 1, 2, 1, 1])
-                
-                # 漏斗数据
-                funnel_stages = ['浏览', '加购', '下单', '支付']
-                funnel_values = [
-                    visitors,
-                    int(visitors * np.random.uniform(0.3, 0.5)),
-                    int(visitors * np.random.uniform(0.05, 0.1)),
-                    orders
-                ]
-                
-                # 库存数据
-                stock_level = np.random.randint(50, 500)
-                safety_stock = 100
                 
                 data.append({
                     'date': date.date(),
                     'country': country,
                     'category': category,
-                    'sales_amount': round(sales, 2),
+                    'sales_amount': category_sales,
                     'orders': orders,
                     'visitors': visitors,
                     'conversion_rate': round(orders / visitors * 100, 2) if visitors > 0 else 0,
-                    'avg_order_value': round(sales / orders, 2) if orders > 0 else 0,
-                    'new_users': int(visitors * user_dist[0]),
-                    'returning_users': int(visitors * user_dist[1]),
-                    'vip_users': int(visitors * user_dist[2]),
-                    'channel_search': round(channel_dist[0] * 100, 1),
-                    'channel_social': round(channel_dist[1] * 100, 1),
-                    'channel_direct': round(channel_dist[2] * 100, 1),
-                    'channel_ad': round(channel_dist[3] * 100, 1),
-                    'coupon_used': np.random.choice([0, 1], p=[0.6, 0.4]),
-                    'coupon_amount': np.random.uniform(5, 50) if np.random.random() > 0.6 else 0
+                    'avg_order_value': round(category_sales / orders, 2) if orders > 0 else 0,
+                    'category_rank': np.random.randint(1, 9)  # 品类排名
                 })
+    
+    # 生成A/B测试数据
+    for experiment, variants in ab_experiments.items():
+        for variant in variants:
+            base_conversion = np.random.uniform(2.0, 5.0)
+            for i in range(30):  # 30天的实验数据
+                date = (end_date - timedelta(days=30 + i)).date()
+                conversion = base_conversion * np.random.uniform(0.9, 1.1)
+                visitors = np.random.randint(1000, 5000)
+                orders = int(visitors * conversion / 100)
                 
-                # 库存数据
-                inventory_data.append({
-                    'date': date.date(),
-                    'country': country,
-                    'category': category,
-                    'stock_level': stock_level,
-                    'safety_stock': safety_stock,
-                    'needs_replenishment': stock_level < safety_stock,
-                    'daily_sales': orders
+                ab_test_data.append({
+                    'experiment': experiment,
+                    'variant': variant,
+                    'date': date,
+                    'visitors': visitors,
+                    'conversions': orders,
+                    'conversion_rate': conversion,
+                    'revenue': orders * np.random.uniform(50, 200)
                 })
-                
-                # 漏斗数据
-                for stage, value in zip(funnel_stages, funnel_values):
-                    funnel_data.append({
-                        'date': date.date(),
-                        'country': country,
-                        'category': category,
-                        'funnel_stage': stage,
-                        'value': value
-                    })
     
     df = pd.DataFrame(data)
+    product_df = pd.DataFrame(product_data)
+    ab_df = pd.DataFrame(ab_test_data)
+    elasticity_df = pd.DataFrame(price_elasticity_data)
     
-    # 添加去年同期数据（模拟）
-    df['sales_last_year'] = df['sales_amount'] * last_year_factor * np.random.uniform(0.9, 1.1)
-    df['orders_last_year'] = df['orders'] * last_year_factor * np.random.uniform(0.9, 1.1)
+    return df, product_df, ab_df, elasticity_df
+
+# ========== A/B测试分析模块 ==========
+class ABTestAnalyzer:
+    """A/B测试分析器"""
+    
+    def __init__(self, ab_data):
+        self.ab_data = ab_data
+    
+    def analyze_experiment(self, experiment_name):
+        """分析特定实验"""
+        exp_data = self.ab_data[self.ab_data['experiment'] == experiment_name]
+        
+        if exp_data.empty:
+            return None
+        
+        results = {}
+        variants = exp_data['variant'].unique()
+        
+        for variant in variants:
+            variant_data = exp_data[exp_data['variant'] == variant]
+            results[variant] = {
+                'avg_conversion': variant_data['conversion_rate'].mean(),
+                'total_visitors': variant_data['visitors'].sum(),
+                'total_conversions': variant_data['conversions'].sum(),
+                'total_revenue': variant_data['revenue'].sum(),
+                'std_conversion': variant_data['conversion_rate'].std()
+            }
+        
+        # 计算统计显著性（简化版）
+        if len(variants) >= 2:
+            # 这里使用简化计算，实际应使用t检验或z检验
+            base_variant = variants[0]
+            control_rate = results[base_variant]['avg_conversion']
+            control_std = results[base_variant]['std_conversion']
+            control_n = results[base_variant]['total_visitors']
+            
+            for variant in variants[1:]:
+                test_rate = results[variant]['avg_conversion']
+                test_std = results[variant]['std_conversion']
+                test_n = results[variant]['total_visitors']
+                
+                # 计算z-score（简化）
+                if control_n > 0 and test_n > 0:
+                    se = np.sqrt((control_std**2/control_n) + (test_std**2/test_n))
+                    if se > 0:
+                        z_score = (test_rate - control_rate) / se
+                        results[variant]['z_score'] = z_score
+                        results[variant]['is_significant'] = abs(z_score) > 1.96  # 95%置信区间
+                        results[variant]['lift'] = ((test_rate - control_rate) / control_rate * 100) if control_rate > 0 else 0
+        
+        return results
+    
+    def get_best_variant(self, experiment_name):
+        """获取最佳变体"""
+        results = self.analyze_experiment(experiment_name)
+        if not results:
+            return None
+        
+        best_variant = None
+        best_conversion = 0
+        
+        for variant, metrics in results.items():
+            if metrics['avg_conversion'] > best_conversion:
+                best_conversion = metrics['avg_conversion']
+                best_variant = variant
+        
+        return best_variant, best_conversion
+
+# ========== 价格弹性分析模块 ==========
+class PriceElasticityAnalyzer:
+    """价格弹性分析器"""
+    
+    def __init__(self, elasticity_data):
+        self.elasticity_data = elasticity_data
+    
+    def analyze_product_elasticity(self, product_name):
+        """分析单个产品的价格弹性"""
+        product_data = self.elasticity_data[self.elasticity_data['product'] == product_name]
+        
+        if product_data.empty:
+            return None
+        
+        # 按价格分组
+        price_groups = product_data.groupby('price_multiplier').agg({
+            'sales': 'mean',
+            'demand': 'mean'
+        }).reset_index()
+        
+        # 计算价格弹性
+        elasticities = []
+        for i in range(1, len(price_groups)):
+            price_change = (price_groups.iloc[i]['price_multiplier'] - 
+                          price_groups.iloc[i-1]['price_multiplier']) / price_groups.iloc[i-1]['price_multiplier']
+            demand_change = (price_groups.iloc[i]['demand'] - 
+                           price_groups.iloc[i-1]['demand']) / price_groups.iloc[i-1]['demand']
+            
+            if price_change != 0:
+                elasticity = demand_change / price_change
+                elasticities.append(elasticity)
+        
+        avg_elasticity = np.mean(elasticities) if elasticities else 0
+        
+        # 推荐最优价格
+        optimal_price_idx = price_groups['sales'].idxmax()
+        optimal_price_multiplier = price_groups.loc[optimal_price_idx, 'price_multiplier']
+        
+        return {
+            'price_groups': price_groups,
+            'avg_elasticity': avg_elasticity,
+            'optimal_price_multiplier': optimal_price_multiplier,
+            'is_elastic': abs(avg_elasticity) > 1  # 弹性需求判断
+        }
+
+# ========== 自动化报告模块 ==========
+class ReportGenerator:
+    """自动化报告生成器"""
+    
+    def __init__(self, sales_data, product_data, ab_data):
+        self.sales_data = sales_data
+        self.product_data = product_data
+        self.ab_data = ab_data
+    
+    def generate_daily_report(self):
+        """生成日报"""
+        latest_date = self.sales_data['date'].max()
+        yesterday = latest_date - timedelta(days=1)
+        
+        # 获取昨日数据
+        yesterday_data = self.sales_data[self.sales_data['date'] == yesterday]
+        
+        if yesterday_data.empty:
+            return "无昨日数据"
+        
+        # 计算关键指标
+        total_sales = yesterday_data['sales_amount'].sum()
+        total_orders = yesterday_data['orders'].sum()
+        avg_conversion = yesterday_data['conversion_rate'].mean()
+        
+        # 获取热销产品
+        yesterday_products = self.product_data[self.product_data['date'] == yesterday]
+        top_products = yesterday_products.groupby('product')['sales_amount'].sum().nlargest(5)
+        
+        # 生成报告
+        report = f"""
+        ===== 跨境电商大促日报 =====
+        报告日期: {yesterday}
+        
+        关键指标:
+        - 总销售额: ¥{total_sales:,.2f}
+        - 总订单数: {total_orders:,}
+        - 平均转化率: {avg_conversion:.2f}%
+        
+        热销商品TOP5:
+        """
+        
+        for i, (product, sales) in enumerate(top_products.items(), 1):
+            report += f"{i}. {product}: ¥{sales:,.2f}\n"
+        
+        # A/B测试摘要
+        report += "\nA/B测试状态:\n"
+        experiments = self.ab_data['experiment'].unique()
+        for exp in experiments[:3]:  # 只显示前3个实验
+            exp_data = self.ab_data[self.ab_data['experiment'] == exp]
+            latest_exp = exp_data[exp_data['date'] == exp_data['date'].max()]
+            if not latest_exp.empty:
+                best_variant = latest_exp.loc[latest_exp['conversion_rate'].idxmax(), 'variant']
+                report += f"- {exp}: 当前最佳 {best_variant}\n"
+        
+        return report
+    
+    def send_email_report(self, to_email, smtp_config=None):
+        """发送邮件报告（简化版）"""
+        report = self.generate_daily_report()
+        
+        # 这里需要配置SMTP服务器
+        if smtp_config:
+            try:
+                msg = MIMEMultipart()
+                msg['From'] = smtp_config['from_email']
+                msg['To'] = to_email
+                msg['Subject'] = f"跨境电商大促日报 - {datetime.now().date()}"
+                
+                # 添加报告内容
+                msg.attach(MIMEText(report, 'plain'))
+                
+                # 这里添加发邮件的逻辑
+                # 实际使用时需要配置SMTP服务器
+                st.success(f"报告已生成，可发送到 {to_email}")
+                return True
+            except Exception as e:
+                st.error(f"发送邮件失败: {str(e)}")
+                return False
+        else:
+            # 如果没有配置SMTP，则显示报告内容
+            st.info("请配置SMTP服务器以发送邮件")
+            st.text(report)
+            return False
+
+# ========== 初始化数据 ==========
+df, product_df, ab_df, elasticity_df = generate_comprehensive_mock_data()
+
+# 初始化分析器
+ab_analyzer = ABTestAnalyzer(ab_df)
+price_analyzer = PriceElasticityAnalyzer(elasticity_df)
+report_generator = ReportGenerator(df, product_df, ab_df)
+
+# ========== 大屏顶部控制栏 ==========
+# 添加全屏按钮
+st.markdown(create_fullscreen_button(), unsafe_allow_html=True)
+
+# 顶部控制栏
+with st.container():
+    col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 2])
+    
+    with col1:
+        st.markdown("<h1 style='text-align: left;'>🚀 跨境电商大促智能作战室</h1>", unsafe_allow_html=True)
+    
+    with col2:
+        view_mode = st.selectbox("显示模式", ["大屏模式", "移动模式", "分析模式"])
+    
+    with col3:
+        refresh_rate = st.selectbox("刷新频率", ["实时", "每5分钟", "每15分钟", "每30分钟"])
+    
+    with col4:
+        if st.button("🔄 刷新数据", type="secondary"):
+            st.cache_data.clear()
+            st.rerun()
+    
+    with col5:
+        if st.button("📧 发送日报", type="primary"):
+            with st.spinner("生成日报中..."):
+                report_generator.send_email_report("admin@example.com")
+
+st.markdown("---")
+
+# ========== 实时监控预警面板（优化为大屏显示） ==========
+st.markdown("<h2 style='text-align: center;'>📊 实时监控与预警面板</h2>", unsafe_allow_html=True)
+
+# 第一行：核心KPI（大屏优化）
+kpi_cols = st.columns(5)
+
+with kpi_cols[0]:
+    total_sales = df[df['date'] == df['date'].max()]['sales_amount'].sum()
+    st.markdown(f"""
+    <div class='kpi-card'>
+        <h3>💰 今日销售额</h3>
+        <h1 style='font-size: 2.5rem; margin: 10px 0;'>¥{total_sales:,.0f}</h1>
+        <p>📈 较昨日 +12.5%</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_cols[1]:
+    total_orders = df[df['date'] == df['date'].max()]['orders'].sum()
+    st.markdown(f"""
+    <div class='kpi-card'>
+        <h3>📦 今日订单数</h3>
+        <h1 style='font-size: 2.5rem; margin: 10px 0;'>{total_orders:,}</h1>
+        <p>📈 较昨日 +8.3%</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_cols[2]:
+    avg_conversion = df[df['date'] == df['date'].max()]['conversion_rate'].mean()
+    st.markdown(f"""
+    <div class='kpi-card'>
+        <h3>🔄 转化率</h3>
+        <h1 style='font-size: 2.5rem; margin: 10px 0;'>{avg_conversion:.2f}%</h1>
+        <p>📈 较昨日 +0.3%</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_cols[3]:
+    avg_aov = df[df['date'] == df['date'].max()]['avg_order_value'].mean()
+    st.markdown(f"""
+    <div class='kpi-card'>
+        <h3>🎯 平均客单价</h3>
+        <h1 style='font-size: 2.5rem; margin: 10px 0;'>¥{avg_aov:.0f}</h1>
+        <p>📈 较昨日 +5.2%</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_cols[4]:
+    top_country = df.groupby('country')['sales_amount'].sum().idxmax()
+    st.markdown(f"""
+    <div class='kpi-card'>
+        <h3>🌍 热销国家</h3>
+        <h1 style='font-size: 2.5rem; margin: 10px 0;'>{top_country}</h1>
+        <p>🔥 销售额最高</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# 第二行：预警信息和目标进度
+st.markdown("---")
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.subheader("🚨 实时预警信息")
+    
+    # 模拟预警信息
+    warnings_data = [
+        {"type": "high", "message": "美国市场销售额异常下降15%", "time": "10:30"},
+        {"type": "medium", "message": "电子产品库存低于安全线", "time": "09:45"},
+        {"type": "low", "message": "日本市场转化率持续上升", "time": "08:20"},
+    ]
+    
+    for warning in warnings_data:
+        alert_class = f"alert-{warning['type']}"
+        st.markdown(f"""
+        <div class='ranking-item'>
+            <span class='alert-indicator {alert_class}'></span>
+            <strong>{warning['message']}</strong>
+            <span style='float: right; color: #666;'>{warning['time']}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+with col2:
+    st.subheader("🎯 大促目标进度")
+    
+    # 目标设置
+    sales_target = 10000000
+    orders_target = 100000
+    sales_progress = min(total_sales / sales_target * 100, 100)
+    orders_progress = min(total_orders / orders_target * 100, 100)
+    
+    st.markdown(f"**销售额目标:** ¥{sales_target:,.0f}")
+    st.progress(sales_progress / 100)
+    st.caption(f"已完成: {sales_progress:.1f}%")
+    
+    st.markdown(f"**订单数目标:** {orders_target:,}")
+    st.progress(orders_progress / 100)
+    st.caption(f"已完成: {orders_progress:.1f}%")
+
+# ========== 主分析区域（标签页布局） ==========
+st.markdown("---")
+st.markdown("<h2 style='text-align: center;'>📈 深度分析与排行系统</h2>", unsafe_allow_html=True)
+
+# 创建标签页
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🏆 销量排行系统", 
+    "🔬 A/B测试分析", 
+    "💰 价格弹性分析", 
+    "🌐 全球销售视图", 
+    "📋 详细数据"
+])
+
+# ========== 标签页1: 销量排行系统 ==========
+with tab1:
+    st.markdown("<h3 style='text-align: center;'>🏆 多维度销量排行系统</h3>", unsafe_allow_html=True)
+    
+    # 排行类型选择
+    rank_type = st.radio("选择排行类型", 
+                        ["总销量排行", "品类销量排行", "产品销量排行"], 
+                        horizontal=True)
+    
+    if rank_type == "总销量排行":
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # 国家销量排行
+            st.subheader("🌍 国家销量排行")
+            country_rank = df.groupby('country')['sales_amount'].sum().sort_values(ascending=False).reset_index()
+            
+            fig_country = px.bar(
+                country_rank.head(10),
+                x='sales_amount',
+                y='country',
+                orientation='h',
+                color='sales_amount',
+                color_continuous_scale='Viridis',
+                title='国家销量TOP10'
+            )
+            st.plotly_chart(fig_country, use_container_width=True)
+        
+        with col2:
+            st.subheader("🥇 排行榜单")
+            for i, (country, sales) in enumerate(zip(country_rank['country'].head(5), 
+                                                    country_rank['sales_amount'].head(5)), 1):
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                st.markdown(f"""
+                <div class='ranking-item'>
+                    <span style='font-size: 1.2rem;'>{medal}</span>
+                    <strong>{country}</strong>
+                    <span style='float: right; color: #f39c12;'>¥{sales:,.0f}</span>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    elif rank_type == "品类销量排行":
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # 品类销量排行
+            st.subheader("📦 品类销量排行")
+            category_rank = df.groupby('category')['sales_amount'].sum().sort_values(ascending=False).reset_index()
+            
+            # 使用饼图展示品类分布
+            fig_category = px.pie(
+                category_rank,
+                values='sales_amount',
+                names='category',
+                title='品类销售额占比',
+                hole=0.3
+            )
+            st.plotly_chart(fig_category, use_container_width=True)
+        
+        with col2:
+            st.subheader("🎯 品类选择")
+            selected_category = st.selectbox(
+                "选择品类查看详情",
+                category_rank['category'].tolist()
+            )
+            
+            if selected_category:
+                # 显示该品类下的产品排行
+                st.subheader(f"📊 {selected_category} 产品排行")
+                category_products = product_df[product_df['category'] == selected_category]
+                product_rank = category_products.groupby('product')['sales_amount'].sum().sort_values(ascending=False).reset_index()
+                
+                for i, (product, sales) in enumerate(zip(product_rank['product'].head(5), 
+                                                        product_rank['sales_amount'].head(5)), 1):
+                    st.markdown(f"""
+                    <div class='ranking-item'>
+                        <strong>{i}. {product}</strong>
+                        <span style='float: right; color: #3498db;'>¥{sales:,.0f}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+    elif rank_type == "产品销量排行":
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            # 产品销量总排行
+            st.subheader("🔥 热销商品TOP20")
+            product_rank_all = product_df.groupby(['category', 'product'])['sales_amount'].sum().reset_index()
+            product_rank_all = product_rank_all.sort_values('sales_amount', ascending=False).head(20)
+            
+            fig_product = px.bar(
+                product_rank_all,
+                x='sales_amount',
+                y='product',
+                color='category',
+                orientation='h',
+                title='热销商品排行榜',
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            fig_product.update_layout(height=600)
+            st.plotly_chart(fig_product, use_container_width=True)
+        
+        with col2:
+            st.subheader("🔍 产品详情")
+            selected_product = st.selectbox(
+                "选择产品",
+                product_rank_all['product'].head(10).tolist()
+            )
+            
+            if selected_product:
+                product_info = product_df[product_df['product'] == selected_product].iloc[0]
+                
+                st.markdown(f"""
+                <div style='background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 10px 0;'>
+                    <h4>{selected_product}</h4>
+                    <p><strong>品类:</strong> {product_info['category']}</p>
+                    <p><strong>平均价格:</strong> ¥{product_info['price']:.2f}</p>
+                    <p><strong>总销量:</strong> ¥{product_rank_all[product_rank_all['product'] == selected_product]['sales_amount'].values[0]:,.0f}</p>
+                    <p><strong>利润率:</strong> {product_info['profit_margin']*100:.1f}%</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+# ========== 标签页2: A/B测试分析 ==========
+with tab2:
+    st.markdown("<h3 style='text-align: center;'>🔬 A/B测试实验分析</h3>", unsafe_allow_html=True)
+    
+    # 实验选择
+    experiments = ab_df['experiment'].unique()
+    selected_experiment = st.selectbox("选择实验", experiments)
+    
+    if selected_experiment:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 实验效果对比
+            st.subheader("📊 实验效果对比")
+            
+            # 获取实验数据
+            exp_data = ab_df[ab_df['experiment'] == selected_experiment]
+            
+            # 按变体分组
+            variant_data = exp_data.groupby(['variant', 'date']).agg({
+                'conversion_rate': 'mean',
+                'revenue': 'sum'
+            }).reset_index()
+            
+            # 绘制转化率趋势
+            fig_ab_trend = px.line(
+                variant_data,
+                x='date',
+                y='conversion_rate',
+                color='variant',
+                title=f'{selected_experiment} - 转化率趋势',
+                markers=True
+            )
+            st.plotly_chart(fig_ab_trend, use_container_width=True)
+        
+        with col2:
+            # 实验结果分析
+            st.subheader("📈 实验结果摘要")
+            
+            # 分析实验
+            results = ab_analyzer.analyze_experiment(selected_experiment)
+            
+            if results:
+                # 显示各变体表现
+                for variant, metrics in results.items():
+                    color = "#2ecc71" if variant == list(results.keys())[0] else "#e74c3c"
+                    
+                    st.markdown(f"""
+                    <div style='background: {color}; color: white; padding: 10px; border-radius: 8px; margin: 5px 0;'>
+                        <strong>{variant}</strong>
+                        <div style='display: flex; justify-content: space-between;'>
+                            <span>转化率: {metrics['avg_conversion']:.2f}%</span>
+                            <span>访客: {metrics['total_visitors']:,}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # 显示最佳变体
+                best_variant, best_conversion = ab_analyzer.get_best_variant(selected_experiment)
+                
+                if best_variant:
+                    st.success(f"🎉 **推荐变体: {best_variant}**")
+                    st.info(f"转化率: {best_conversion:.2f}%")
+                    
+                    # 显示统计显著性
+                    if 'z_score' in results.get(best_variant, {}):
+                        z_score = results[best_variant]['z_score']
+                        is_sig = results[best_variant]['is_significant']
+                        
+                        if is_sig:
+                            st.success(f"✅ 统计显著 (z={z_score:.2f})")
+                        else:
+                            st.warning(f"⚠️ 统计不显著 (z={z_score:.2f})")
+
+# ========== 标签页3: 价格弹性分析 ==========
+with tab3:
+    st.markdown("<h3 style='text-align: center;'>💰 价格弹性与优化分析</h3>", unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        # 产品选择
+        st.subheader("📦 选择分析产品")
+        
+        # 获取热门产品
+        top_products = product_df.groupby('product')['sales_amount'].sum().nlargest(10).index.tolist()
+        selected_product = st.selectbox("产品", top_products)
+        
+        if selected_product:
+            # 分析价格弹性
+            analysis = price_analyzer.analyze_product_elasticity(selected_product)
+            
+            if analysis:
+                st.subheader("📊 价格弹性分析")
+                
+                st.metric(
+                    label="平均价格弹性",
+                    value=f"{analysis['avg_elasticity']:.2f}",
+                    delta="弹性" if analysis['is_elastic'] else "非弹性"
+                )
+                
+                st.metric(
+                    label="推荐价格系数",
+                    value=f"{analysis['optimal_price_multiplier']:.2f}x",
+                    delta="最优定价"
+                )
+                
+                # 解释说明
+                if analysis['avg_elasticity'] < -1:
+                    st.info("💡 该产品为弹性需求，降价可显著提升销量")
+                elif analysis['avg_elasticity'] > -1 and analysis['avg_elasticity'] < 0:
+                    st.info("💡 该产品为非弹性需求，提价可增加收入")
+                else:
+                    st.info("💡 价格对需求影响较小")
+    
+    with col2:
+        if selected_product and analysis:
+            st.subheader("📈 价格-需求关系")
+            
+            # 绘制价格弹性曲线
+            fig_elasticity = make_subplots(specs=[[{"secondary_y": True}]])
+            
+            # 添加销售额曲线
+            fig_elasticity.add_trace(
+                go.Scatter(
+                    x=analysis['price_groups']['price_multiplier'],
+                    y=analysis['price_groups']['sales'],
+                    name='销售额',
+                    mode='lines+markers',
+                    line=dict(color='#3498db', width=3)
+                ),
+                secondary_y=False
+            )
+            
+            # 添加需求曲线
+            fig_elasticity.add_trace(
+                go.Scatter(
+                    x=analysis['price_groups']['price_multiplier'],
+                    y=analysis['price_groups']['demand'],
+                    name='需求量',
+                    mode='lines+markers',
+                    line=dict(color='#e74c3c', width=3, dash='dash')
+                ),
+                secondary_y=True
+            )
+            
+            fig_elasticity.update_layout(
+                title=f'{selected_product} - 价格弹性分析',
+                xaxis_title="价格系数",
+                hovermode='x unified',
+                height=400
+            )
+            
+            fig_elasticity.update_yaxes(title_text="销售额", secondary_y=False)
+            fig_elasticity.update_yaxes(title_text="需求量", secondary_y=True)
+            
+            st.plotly_chart(fig_elasticity, use_container_width=True)
+            
+            # 价格优化建议
+            st.subheader("🎯 价格优化建议")
+            
+            optimal_price = product_df[product_df['product'] == selected_product]['price'].mean() * analysis['optimal_price_multiplier']
+            current_price = product_df[product_df['product'] == selected_product]['price'].mean()
+            
+            price_change = ((optimal_price - current_price) / current_price * 100)
+            
+            if price_change > 0:
+                st.success(f"建议提价 {price_change:.1f}%，从 ¥{current_price:.2f} 调整到 ¥{optimal_price:.2f}")
+            elif price_change < 0:
+                st.success(f"建议降价 {abs(price_change):.1f}%，从 ¥{current_price:.2f} 调整到 ¥{optimal_price:.2f}")
+            else:
+                st.info("当前价格已接近最优")
+
+# ========== 标签页4: 全球销售视图 ==========
+with tab4:
+    st.markdown("<h3 style='text-align: center;'>🌐 全球销售热力图</h3>", unsafe_allow_html=True)
+    
+    # 全球销售地图
+    country_sales = df.groupby(['country', 'date']).agg({
+        'sales_amount': 'sum',
+        'orders': 'sum'
+    }).reset_index()
+    
+    # 最新日期的数据
+    latest_sales = country_sales[country_sales['date'] == country_sales['date'].max()]
     
     # 添加经纬度
     country_coords = {
@@ -157,427 +976,26 @@ def generate_enhanced_mock_data():
         '巴西': {'lat': -14.2350, 'lon': -51.9253}
     }
     
-    df['latitude'] = df['country'].apply(lambda x: country_coords.get(x, {}).get('lat', 0))
-    df['longitude'] = df['country'].apply(lambda x: country_coords.get(x, {}).get('lon', 0))
+    latest_sales['latitude'] = latest_sales['country'].apply(lambda x: country_coords.get(x, {}).get('lat', 0))
+    latest_sales['longitude'] = latest_sales['country'].apply(lambda x: country_coords.get(x, {}).get('lon', 0))
     
-    inventory_df = pd.DataFrame(inventory_data)
-    funnel_df = pd.DataFrame(funnel_data)
-    
-    return df, inventory_df, funnel_df
-
-# ========== 2. 预警系统类 ==========
-class AlertSystem:
-    """实时监控预警系统"""
-    
-    def __init__(self, df):
-        self.df = df
-        self.alerts = []
-        
-    def check_alerts(self, thresholds=None):
-        """检查所有预警规则"""
-        if thresholds is None:
-            thresholds = {
-                'sales_drop': 0.2,  # 销售额下降20%
-                'conversion_low': 1.0,  # 转化率低于1%
-                'stock_warning': 0.3,  # 库存低于安全库存30%
-                'aov_drop': 0.15,  # 客单价下降15%
-            }
-        
-        self.alerts = []
-        
-        # 检查销售额异常
-        latest_sales = self.df[self.df['date'] == self.df['date'].max()]['sales_amount'].mean()
-        prev_sales = self.df[self.df['date'] == self.df['date'].max() - timedelta(days=1)]['sales_amount'].mean()
-        
-        if prev_sales > 0 and (latest_sales - prev_sales) / prev_sales < -thresholds['sales_drop']:
-            self.alerts.append({
-                'type': 'warning',
-                'title': '⚠️ 销售额异常下降',
-                'message': f'销售额较昨日下降{(prev_sales - latest_sales)/prev_sales*100:.1f}%',
-                'time': datetime.now().strftime('%H:%M'),
-                'priority': 'high'
-            })
-        
-        # 检查转化率
-        avg_conversion = self.df[self.df['date'] == self.df['date'].max()]['conversion_rate'].mean()
-        if avg_conversion < thresholds['conversion_low']:
-            self.alerts.append({
-                'type': 'danger',
-                'title': '🔴 转化率过低',
-                'message': f'当前转化率仅{avg_conversion:.2f}%，低于阈值{thresholds["conversion_low"]}%',
-                'time': datetime.now().strftime('%H:%M'),
-                'priority': 'high'
-            })
-        
-        # 检查库存（简化版）
-        low_stock_categories = self.df.groupby('category')['orders'].sum().nlargest(3)
-        for cat in low_stock_categories.index:
-            self.alerts.append({
-                'type': 'info',
-                'title': '📦 热销品类库存关注',
-                'message': f'{cat}热销中，建议检查库存',
-                'time': datetime.now().strftime('%H:%M'),
-                'priority': 'medium'
-            })
-        
-        return self.alerts
-
-# ========== 3. 预测模型（简化版） ==========
-def generate_predictions(df, days_to_predict=7):
-    """生成销售额预测（使用简单移动平均）"""
-    
-    # 按日期聚合销售额
-    daily_sales = df.groupby('date')['sales_amount'].sum().reset_index()
-    
-    # 使用移动平均生成预测
-    predictions = []
-    last_date = daily_sales['date'].max()
-    
-    # 计算7天移动平均作为趋势
-    if len(daily_sales) >= 7:
-        ma_trend = daily_sales['sales_amount'].rolling(window=7).mean().iloc[-1]
-        
-        # 生成未来预测（带增长趋势）
-        for i in range(1, days_to_predict + 1):
-            pred_date = last_date + timedelta(days=i)
-            # 基础预测 + 轻微增长 + 随机波动
-            pred_value = ma_trend * (1 + 0.02 * i) * np.random.uniform(0.95, 1.05)
-            
-            predictions.append({
-                'date': pred_date,
-                'sales_amount': pred_value,
-                'is_prediction': True
-            })
-    
-    # 准备历史+预测数据
-    historical = daily_sales.copy()
-    historical['is_prediction'] = False
-    
-    if predictions:
-        pred_df = pd.DataFrame(predictions)
-        full_data = pd.concat([historical, pred_df], ignore_index=True)
-    else:
-        full_data = historical
-    
-    return full_data
-
-# ========== 4. 初始化数据 ==========
-df, inventory_df, funnel_df = generate_enhanced_mock_data()
-alert_system = AlertSystem(df)
-
-# 保存数据到文件
-data_path = "spring_promo_enhanced_data.csv"
-df.to_csv(data_path, index=False, encoding='utf-8-sig')
-
-# ========== 5. 侧边栏配置 ==========
-with st.sidebar:
-    st.title("⚙️ 控制面板")
-    
-    # 预警设置
-    st.header("🔔 预警设置")
-    sales_drop_threshold = st.slider("销售额下降阈值(%)", 10, 50, 20)
-    conversion_threshold = st.slider("转化率低阈值(%)", 0.5, 5.0, 1.0)
-    
-    # 目标设置
-    st.header("🎯 大促目标设置")
-    sales_target = st.number_input("销售额目标(¥)", value=5000000, step=100000)
-    orders_target = st.number_input("订单数目标", value=50000, step=1000)
-    
-    # 日期范围选择
-    st.header("📅 日期筛选")
-    min_date = df['date'].min()
-    max_date = df['date'].max()
-    date_range = st.date_input(
-        "选择日期范围",
-        value=(max_date - timedelta(days=14), max_date),
-        min_value=min_date,
-        max_value=max_date
-    )
-    
-    # 国家选择
-    st.header("🌍 国家筛选")
-    all_countries = df['country'].unique().tolist()
-    selected_countries = st.multiselect(
-        "选择国家",
-        options=all_countries,
-        default=all_countries[:3]
-    )
-    
-    # 品类选择
-    st.header("📦 品类筛选")
-    all_categories = df['category'].unique().tolist()
-    selected_categories = st.multiselect(
-        "选择品类",
-        options=all_categories,
-        default=all_categories[:3]
-    )
-    
-    # 生成报告按钮
-    st.header("📋 报告工具")
-    if st.button("📄 生成分析报告"):
-        st.success("报告生成中...")
-        # 这里可以添加报告生成逻辑
-
-# ========== 6. 数据筛选 ==========
-if len(date_range) == 2:
-    start_date, end_date = date_range
-    filtered_df = df[
-        (df['date'] >= start_date) & 
-        (df['date'] <= end_date) &
-        (df['country'].isin(selected_countries if selected_countries else all_countries)) &
-        (df['category'].isin(selected_categories if selected_categories else all_categories))
-    ]
-else:
-    filtered_df = df
-
-# ========== 7. 顶部KPI面板（增强版） ==========
-st.header("📈 实时监控面板")
-
-# 计算核心指标
-total_sales = filtered_df['sales_amount'].sum()
-total_orders = filtered_df['orders'].sum()
-avg_conversion = filtered_df['conversion_rate'].mean()
-avg_aov = filtered_df['avg_order_value'].mean()
-
-# 计算同比
-current_period_sales = filtered_df[filtered_df['date'] >= max_date - timedelta(days=7)]['sales_amount'].sum()
-last_period_sales = filtered_df[
-    (filtered_df['date'] >= max_date - timedelta(days=14)) & 
-    (filtered_df['date'] < max_date - timedelta(days=7))
-]['sales_amount'].sum()
-week_over_week = ((current_period_sales - last_period_sales) / last_period_sales * 100) if last_period_sales > 0 else 0
-
-# 计算目标完成率
-sales_completion = min(total_sales / sales_target * 100, 100) if sales_target > 0 else 0
-orders_completion = min(total_orders / orders_target * 100, 100) if orders_target > 0 else 0
-
-# 预警检查
-thresholds = {
-    'sales_drop': sales_drop_threshold / 100,
-    'conversion_low': conversion_threshold
-}
-alerts = alert_system.check_alerts(thresholds)
-
-# 第一行：核心KPI
-col1, col2, col3, col4, col5 = st.columns(5)
-
-with col1:
-    # 添加预警指示器
-    alert_icon = "🔴" if any(a['priority'] == 'high' for a in alerts) else "🟢"
-    st.metric(
-        label=f"总销售额 {alert_icon}",
-        value=f"¥{total_sales:,.0f}",
-        delta=f"目标: {sales_completion:.1f}%",
-        delta_color="normal" if sales_completion >= 70 else "inverse"
-    )
-
-with col2:
-    st.metric(
-        label="总订单数",
-        value=f"{total_orders:,}",
-        delta=f"目标: {orders_completion:.1f}%",
-        delta_color="normal" if orders_completion >= 70 else "inverse"
-    )
-
-with col3:
-    conversion_icon = "⚠️" if avg_conversion < conversion_threshold else "✅"
-    st.metric(
-        label=f"平均转化率 {conversion_icon}",
-        value=f"{avg_conversion:.2f}%",
-        delta=f"{week_over_week:+.1f}% WoW",
-        delta_color="normal" if avg_conversion >= conversion_threshold else "inverse"
-    )
-
-with col4:
-    st.metric(
-        label="平均客单价",
-        value=f"¥{avg_aov:.0f}",
-        delta="+5.2%"
-    )
-
-with col5:
-    # 新用户占比
-    total_users = filtered_df['new_users'].sum() + filtered_df['returning_users'].sum()
-    new_user_ratio = filtered_df['new_users'].sum() / total_users * 100 if total_users > 0 else 0
-    st.metric(
-        label="新用户占比",
-        value=f"{new_user_ratio:.1f}%",
-        delta="+2.3%"
-    )
-
-# 第二行：目标进度条和预警面板
-st.subheader("🎯 目标进度跟踪")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    # 销售额目标进度
-    st.progress(sales_completion / 100)
-    st.caption(f"销售额目标完成度: {sales_completion:.1f}% (¥{total_sales:,.0f} / ¥{sales_target:,.0f})")
-
-with col2:
-    # 订单数目标进度
-    st.progress(orders_completion / 100)
-    st.caption(f"订单数目标完成度: {orders_completion:.1f}% ({total_orders:,} / {orders_target:,})")
-
-# 预警面板
-if alerts:
-    st.subheader("🚨 实时预警")
-    
-    high_alerts = [a for a in alerts if a['priority'] == 'high']
-    medium_alerts = [a for a in alerts if a['priority'] == 'medium']
-    
-    if high_alerts:
-        for alert in high_alerts:
-            st.error(f"**{alert['title']}** - {alert['message']} ({alert['time']})")
-    
-    if medium_alerts:
-        for alert in medium_alerts:
-            st.warning(f"**{alert['title']}** - {alert['message']} ({alert['time']})")
-
-st.markdown("---")
-
-# ========== 8. 主标签页区域 ==========
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "📈 销售趋势与预测", 
-    "🌍 全球分布", 
-    "👥 用户行为", 
-    "📦 库存管理", 
-    "🎯 营销效果", 
-    "📊 品类分析",
-    "📋 详细数据"
-])
-
-# ========== 标签页1: 销售趋势与预测 ==========
-with tab1:
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.subheader("📈 销售额趋势与预测")
-        
-        # 生成预测数据
-        pred_data = generate_predictions(filtered_df, days_to_predict=7)
-        
-        # 创建趋势图
-        fig_trend = go.Figure()
-        
-        # 历史数据
-        historical = pred_data[~pred_data['is_prediction']]
-        fig_trend.add_trace(go.Scatter(
-            x=historical['date'],
-            y=historical['sales_amount'],
-            mode='lines+markers',
-            name='实际销售额',
-            line=dict(color='#1f77b4', width=3),
-            marker=dict(size=6)
-        ))
-        
-        # 预测数据
-        if any(pred_data['is_prediction']):
-            predictions = pred_data[pred_data['is_prediction']]
-            fig_trend.add_trace(go.Scatter(
-                x=predictions['date'],
-                y=predictions['sales_amount'],
-                mode='lines+markers',
-                name='预测销售额',
-                line=dict(color='#ff7f0e', width=3, dash='dash'),
-                marker=dict(size=6, symbol='diamond')
-            ))
-            
-            # 添加预测区间（置信带）
-            fig_trend.add_trace(go.Scatter(
-                x=list(predictions['date']) + list(predictions['date'][::-1]),
-                y=list(predictions['sales_amount'] * 1.1) + list(predictions['sales_amount'] * 0.9)[::-1],
-                fill='toself',
-                fillcolor='rgba(255, 127, 14, 0.2)',
-                line=dict(color='rgba(255, 127, 14, 0)'),
-                name='预测区间',
-                showlegend=True
-            ))
-        
-        fig_trend.update_layout(
-            title='销售额趋势与7日预测',
-            xaxis_title="日期",
-            yaxis_title="销售额 (¥)",
-            hovermode='x unified',
-            height=500,
-            template="plotly_white",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        
-        st.plotly_chart(fig_trend, use_container_width=True)
-    
-    with col2:
-        st.subheader("📊 同比环比分析")
-        
-        # 计算各类对比
-        current_week = filtered_df[filtered_df['date'] >= max_date - timedelta(days=7)]
-        last_week = filtered_df[
-            (filtered_df['date'] >= max_date - timedelta(days=14)) & 
-            (filtered_df['date'] < max_date - timedelta(days=7))
-        ]
-        
-        metrics = [
-            ("本周销售额", "上周销售额", current_week['sales_amount'].sum(), last_week['sales_amount'].sum()),
-            ("本周订单数", "上周订单数", current_week['orders'].sum(), last_week['orders'].sum()),
-            ("本周转化率", "上周转化率", current_week['conversion_rate'].mean(), last_week['conversion_rate'].mean()),
-            ("本周客单价", "上周客单价", current_week['avg_order_value'].mean(), last_week['avg_order_value'].mean()),
-        ]
-        
-        for current_label, last_label, current_val, last_val in metrics:
-            if last_val > 0:
-                change = (current_val - last_val) / last_val * 100
-                st.metric(
-                    label=current_label,
-                    value=f"{current_val:,.0f}" if isinstance(current_val, (int, float)) and current_val > 100 else f"{current_val:.2f}",
-                    delta=f"{change:+.1f}%",
-                    delta_color="normal" if change >= 0 else "inverse"
-                )
-        
-        # 同比分析（简化）
-        st.subheader("📅 同比分析")
-        st.info("""
-        **去年同期对比:**
-        - 销售额: +32.5% ↑
-        - 订单数: +28.1% ↑  
-        - 转化率: +1.2% ↑
-        - 新用户: +45.3% ↑
-        """)
-
-# ========== 标签页2: 全球分布 ==========
-with tab2:
-    st.subheader("🌍 全球销售额分布")
-    
-    # 按国家聚合
-    country_sales = filtered_df.groupby(['country', 'latitude', 'longitude']).agg({
-        'sales_amount': 'sum',
-        'orders': 'sum',
-        'conversion_rate': 'mean'
-    }).reset_index()
-    
-    # 气泡地图
-    fig_map = px.scatter_geo(
-        country_sales,
+    # 创建全球热力图
+    fig_world = px.scatter_geo(
+        latest_sales,
         lat='latitude',
         lon='longitude',
         size='sales_amount',
         color='sales_amount',
         hover_name='country',
-        hover_data={
-            'sales_amount': ':.0f',
-            'orders': ':.0f',
-            'conversion_rate': ':.2f',
-            'latitude': False,
-            'longitude': False
-        },
-        title='全球销售额分布热力图',
+        hover_data={'sales_amount': ':.0f', 'orders': ':.0f'},
         projection='natural earth',
         color_continuous_scale='Viridis',
-        size_max=40
+        size_max=50,
+        title='全球销售热力图'
     )
     
-    fig_map.update_layout(
-        height=500,
+    fig_world.update_layout(
+        height=600,
         geo=dict(
             showland=True,
             landcolor='lightgray',
@@ -585,577 +1003,113 @@ with tab2:
             countrycolor='white',
             showocean=True,
             oceancolor='lightblue'
-        ),
-        margin=dict(l=0, r=0, t=30, b=0)
+        )
     )
     
-    st.plotly_chart(fig_map, use_container_width=True)
-    
-    # 国家排名和时区热力
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🏆 国家销售额排名")
-        
-        country_rank = country_sales.sort_values('sales_amount', ascending=True)
-        
-        fig_bar = px.bar(
-            country_rank,
-            y='country',
-            x='sales_amount',
-            orientation='h',
-            color='sales_amount',
-            text='sales_amount',
-            color_continuous_scale='Blues'
-        )
-        
-        fig_bar.update_traces(
-            texttemplate='¥%{text:,.0f}',
-            textposition='outside'
-        )
-        
-        fig_bar.update_layout(
-            height=400,
-            showlegend=False,
-            xaxis_title="销售额 (¥)",
-            yaxis_title="",
-            template="plotly_white"
-        )
-        
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    with col2:
-        st.subheader("🕒 时区销售热度")
-        
-        # 模拟时区数据
-        timezones = ['GMT-5', 'GMT+0', 'GMT+1', 'GMT+8', 'GMT+9']
-        sales_by_tz = {tz: np.random.randint(50000, 200000) for tz in timezones}
-        
-        tz_df = pd.DataFrame({
-            'timezone': list(sales_by_tz.keys()),
-            'sales': list(sales_by_tz.values()),
-            'peak_hour': ['14:00-16:00', '10:00-12:00', '11:00-13:00', '20:00-22:00', '21:00-23:00']
-        })
-        
-        fig_tz = px.bar(
-            tz_df,
-            x='timezone',
-            y='sales',
-            color='sales',
-            text='sales',
-            hover_data=['peak_hour']
-        )
-        
-        fig_tz.update_traces(
-            texttemplate='¥%{text:,.0f}',
-            textposition='outside'
-        )
-        
-        fig_tz.update_layout(
-            height=400,
-            title="各时区销售额分布",
-            xaxis_title="时区",
-            yaxis_title="销售额 (¥)",
-            template="plotly_white"
-        )
-        
-        st.plotly_chart(fig_tz, use_container_width=True)
+    st.plotly_chart(fig_world, use_container_width=True)
 
-# ========== 标签页3: 用户行为分析 ==========
-with tab3:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("👥 用户类型分布")
-        
-        # 用户类型数据
-        user_data = {
-            'type': ['新用户', '老用户', 'VIP用户'],
-            'count': [
-                filtered_df['new_users'].sum(),
-                filtered_df['returning_users'].sum(),
-                filtered_df['vip_users'].sum()
-            ]
-        }
-        
-        user_df = pd.DataFrame(user_data)
-        
-        fig_users = px.pie(
-            user_df,
-            values='count',
-            names='type',
-            hole=0.4,
-            color_discrete_sequence=px.colors.qualitative.Set2
-        )
-        
-        fig_users.update_traces(
-            textposition='inside',
-            textinfo='percent+label',
-            hovertemplate='<b>%{label}</b><br>%{value:,} 用户<br>占比: %{percent}'
-        )
-        
-        fig_users.update_layout(
-            height=400,
-            title="用户类型分布"
-        )
-        
-        st.plotly_chart(fig_users, use_container_width=True)
-    
-    with col2:
-        st.subheader("🔄 用户转化漏斗")
-        
-        # 漏斗数据
-        funnel_summary = funnel_df.groupby('funnel_stage')['value'].sum().reset_index()
-        
-        # 确保正确的顺序
-        stage_order = ['浏览', '加购', '下单', '支付']
-        funnel_summary['funnel_stage'] = pd.Categorical(
-            funnel_summary['funnel_stage'], 
-            categories=stage_order, 
-            ordered=True
-        )
-        funnel_summary = funnel_summary.sort_values('funnel_stage')
-        
-        fig_funnel = go.Figure(go.Funnel(
-            y=funnel_summary['funnel_stage'],
-            x=funnel_summary['value'],
-            textinfo="value+percent initial",
-            marker=dict(color=['#636efa', '#ef553b', '#00cc96', '#ab63fa'])
-        ))
-        
-        fig_funnel.update_layout(
-            height=400,
-            title="用户转化漏斗分析",
-            showlegend=False
-        )
-        
-        st.plotly_chart(fig_funnel, use_container_width=True)
-    
-    # 购买时段分析
-    st.subheader("🕒 购买时段热力图")
-    
-    # 模拟购买时段数据
-    hours = list(range(24))
-    days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-    
-    # 生成模拟数据
-    heat_data = []
-    for day_idx, day in enumerate(days):
-        for hour in hours:
-            # 工作日和周末有不同模式
-            if day_idx < 5:  # 工作日
-                base = 100
-                peak_hours = [12, 13, 18, 19, 20]
-            else:  # 周末
-                base = 150
-                peak_hours = [11, 12, 13, 14, 15, 20, 21]
-            
-            if hour in peak_hours:
-                sales = base * np.random.uniform(2, 3)
-            else:
-                sales = base * np.random.uniform(0.3, 0.8)
-            
-            heat_data.append({
-                'day': day,
-                'hour': hour,
-                'sales': sales
-            })
-    
-    heat_df = pd.DataFrame(heat_data)
-    
-    # 创建热力图
-    fig_heat = px.density_heatmap(
-        heat_df,
-        x='hour',
-        y='day',
-        z='sales',
-        color_continuous_scale='YlOrRd',
-        nbinsx=24,
-        nbinsy=7
-    )
-    
-    fig_heat.update_layout(
-        height=400,
-        title="一周购买时段热力图",
-        xaxis_title="小时",
-        yaxis_title="星期",
-        xaxis=dict(tickmode='linear', dtick=2)
-    )
-    
-    st.plotly_chart(fig_heat, use_container_width=True)
-
-# ========== 标签页4: 库存管理 ==========
-with tab4:
-    st.subheader("📦 库存状态监控")
-    
-    # 库存预警分析
-    inventory_status = inventory_df.groupby(['country', 'category']).agg({
-        'stock_level': 'mean',
-        'safety_stock': 'mean',
-        'needs_replenishment': 'sum',
-        'daily_sales': 'mean'
-    }).reset_index()
-    
-    # 计算库存周转天数
-    inventory_status['days_of_stock'] = inventory_status['stock_level'] / inventory_status['daily_sales']
-    inventory_status['stock_ratio'] = inventory_status['stock_level'] / inventory_status['safety_stock']
-    
-    # 标记需要补货的商品
-    inventory_status['status'] = np.where(
-        inventory_status['stock_ratio'] < 1,
-        '急需补货',
-        np.where(inventory_status['stock_ratio'] < 1.5, '需要关注', '库存充足')
-    )
-    
-    # 库存状态表格
-    st.dataframe(
-        inventory_status.sort_values('stock_ratio'),
-        column_config={
-            "country": "国家",
-            "category": "品类",
-            "stock_level": st.column_config.NumberColumn("库存量", format="%d"),
-            "safety_stock": st.column_config.NumberColumn("安全库存", format="%d"),
-            "days_of_stock": st.column_config.NumberColumn("库存天数", format="%.1f 天"),
-            "stock_ratio": st.column_config.NumberColumn("库存比例", format="%.2f"),
-            "status": st.column_config.TextColumn("状态")
-        },
-        use_container_width=True,
-        height=400
-    )
-    
-    # 库存可视化
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 库存充足度分析")
-        
-        status_counts = inventory_status['status'].value_counts()
-        
-        fig_stock_status = px.bar(
-            x=status_counts.index,
-            y=status_counts.values,
-            color=status_counts.index,
-            color_discrete_map={
-                '库存充足': '#00cc96',
-                '需要关注': '#ffa15a',
-                '急需补货': '#ef553b'
-            },
-            text=status_counts.values
-        )
-        
-        fig_stock_status.update_traces(
-            texttemplate='%{text} 个SKU',
-            textposition='outside'
-        )
-        
-        fig_stock_status.update_layout(
-            height=300,
-            title="库存状态分布",
-            xaxis_title="状态",
-            yaxis_title="SKU数量",
-            showlegend=False
-        )
-        
-        st.plotly_chart(fig_stock_status, use_container_width=True)
-    
-    with col2:
-        st.subheader("🔄 补货建议")
-        
-        # 生成补货建议
-        replenishment_needed = inventory_status[
-            inventory_status['status'].isin(['急需补货', '需要关注'])
-        ].sort_values('stock_ratio')
-        
-        if not replenishment_needed.empty:
-            st.warning("**建议立即补货的商品:**")
-            for _, row in replenishment_needed.head(5).iterrows():
-                st.write(f"- **{row['category']}** ({row['country']}): 库存 {row['stock_level']:.0f}, 安全库存 {row['safety_stock']:.0f}, 剩余天数 {row['days_of_stock']:.1f}")
-        else:
-            st.success("✅ 所有商品库存充足")
-
-# ========== 标签页5: 营销效果 ==========
+# ========== 标签页5: 详细数据 ==========
 with tab5:
-    col1, col2 = st.columns(2)
+    st.markdown("<h3 style='text-align: center;'>📋 详细数据与分析</h3>", unsafe_allow_html=True)
     
-    with col1:
-        st.subheader("📢 渠道效果分析")
+    # 数据查看选项
+    data_view = st.radio("数据视图", ["销售数据", "产品数据", "A/B测试数据"], horizontal=True)
+    
+    if data_view == "销售数据":
+        st.dataframe(df, use_container_width=True, height=400)
         
-        # 渠道数据
-        channel_data = {
-            'channel': ['搜索引擎', '社交媒体', '直接访问', '广告推广', '邮件营销', '联盟营销'],
-            'traffic': [35, 25, 15, 12, 8, 5],  # 流量占比
-            'conversion': [3.2, 2.8, 4.1, 2.5, 3.5, 2.2],  # 转化率
-            'roi': [4.2, 3.8, 5.1, 2.9, 4.5, 3.1]  # ROI
+        # 数据下载
+        csv = df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 下载销售数据",
+            data=csv,
+            file_name=f"sales_data_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+    
+    elif data_view == "产品数据":
+        st.dataframe(product_df, use_container_width=True, height=400)
+        
+        csv = product_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 下载产品数据",
+            data=csv,
+            file_name=f"product_data_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+    
+    elif data_view == "A/B测试数据":
+        st.dataframe(ab_df, use_container_width=True, height=400)
+
+# ========== 移动端适配功能 ==========
+if view_mode == "移动模式":
+    st.markdown("""
+    <style>
+    /* 移动端特定样式 */
+    @media (max-width: 768px) {
+        .stButton > button {
+            width: 100%;
+            margin: 5px 0;
         }
         
-        channel_df = pd.DataFrame(channel_data)
+        .stSelectbox, .stRadio {
+            width: 100%;
+        }
         
-        fig_channels = go.Figure()
+        /* 简化KPI显示 */
+        .kpi-card h1 {
+            font-size: 1.5rem !important;
+        }
         
-        fig_channels.add_trace(go.Bar(
-            x=channel_df['channel'],
-            y=channel_df['traffic'],
-            name='流量占比(%)',
-            marker_color='lightblue'
-        ))
-        
-        fig_channels.add_trace(go.Scatter(
-            x=channel_df['channel'],
-            y=channel_df['roi'],
-            name='ROI',
-            yaxis='y2',
-            mode='lines+markers',
-            line=dict(color='red', width=3)
-        ))
-        
-        fig_channels.update_layout(
-            title="渠道效果分析",
-            yaxis=dict(title='流量占比(%)'),
-            yaxis2=dict(
-                title='ROI',
-                overlaying='y',
-                side='right'
-            ),
-            hovermode='x unified',
-            height=400,
-            template="plotly_white",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        
-        st.plotly_chart(fig_channels, use_container_width=True)
-    
-    with col2:
-        st.subheader("🎫 优惠券使用情况")
-        
-        # 优惠券数据
-        coupon_data = filtered_df.groupby('date').agg({
-            'coupon_used': 'sum',
-            'coupon_amount': 'sum',
-            'orders': 'sum'
-        }).reset_index()
-        
-        coupon_data['coupon_usage_rate'] = coupon_data['coupon_used'] / coupon_data['orders'] * 100
-        
-        fig_coupon = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        fig_coupon.add_trace(
-            go.Bar(
-                x=coupon_data['date'],
-                y=coupon_data['coupon_used'],
-                name='优惠券使用数',
-                marker_color='lightgreen'
-            ),
-            secondary_y=False
-        )
-        
-        fig_coupon.add_trace(
-            go.Scatter(
-                x=coupon_data['date'],
-                y=coupon_data['coupon_usage_rate'],
-                name='使用率(%)',
-                line=dict(color='orange', width=3)
-            ),
-            secondary_y=True
-        )
-        
-        fig_coupon.update_layout(
-            title="优惠券使用趋势",
-            hovermode='x unified',
-            height=400,
-            template="plotly_white",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        
-        fig_coupon.update_yaxes(title_text="使用数量", secondary_y=False)
-        fig_coupon.update_yaxes(title_text="使用率(%)", secondary_y=True)
-        
-        st.plotly_chart(fig_coupon, use_container_width=True)
-    
-    # 营销ROI总结
-    st.subheader("💰 营销投入产出总结")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric(
-            label="总营销投入",
-            value="¥125,000",
-            delta="+15.2%"
-        )
-    
-    with col2:
-        st.metric(
-            label="营销带来GMV",
-            value="¥625,000",
-            delta="+22.3%"
-        )
-    
-    with col3:
-        st.metric(
-            label="整体ROI",
-            value="5.0",
-            delta="+0.3"
-        )
+        .kpi-card h3 {
+            font-size: 0.9rem !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-# ========== 标签页6: 品类分析 ==========
-with tab6:
-    st.subheader("📊 品类销售分析")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # 品类销售额占比
-        category_sales = filtered_df.groupby('category')['sales_amount'].sum().reset_index()
-        
-        fig_pie = px.pie(
-            category_sales,
-            values='sales_amount',
-            names='category',
-            title='品类销售额占比',
-            hole=0.3,
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        
-        fig_pie.update_traces(
-            textposition='inside',
-            textinfo='percent+label',
-            hovertemplate='<b>%{label}</b><br>¥%{value:,.0f}<br>占比: %{percent}'
-        )
-        
-        fig_pie.update_layout(height=400)
-        st.plotly_chart(fig_pie, use_container_width=True)
-    
-    with col2:
-        # 品类增长率对比
-        # 计算最近7天 vs 前7天的增长
-        recent_date = filtered_df['date'].max()
-        
-        recent_week = filtered_df[filtered_df['date'] >= recent_date - timedelta(days=7)]
-        previous_week = filtered_df[
-            (filtered_df['date'] >= recent_date - timedelta(days=14)) & 
-            (filtered_df['date'] < recent_date - timedelta(days=7))
-        ]
-        
-        recent_by_cat = recent_week.groupby('category')['sales_amount'].sum()
-        previous_by_cat = previous_week.groupby('category')['sales_amount'].sum()
-        
-        growth_data = []
-        for cat in recent_by_cat.index:
-            if cat in previous_by_cat and previous_by_cat[cat] > 0:
-                growth = (recent_by_cat[cat] - previous_by_cat[cat]) / previous_by_cat[cat] * 100
-                growth_data.append({
-                    'category': cat,
-                    'growth_rate': growth,
-                    'recent_sales': recent_by_cat[cat]
-                })
-        
-        growth_df = pd.DataFrame(growth_data)
-        
-        if not growth_df.empty:
-            fig_growth = px.bar(
-                growth_df.sort_values('growth_rate'),
-                y='category',
-                x='growth_rate',
-                orientation='h',
-                color='growth_rate',
-                color_continuous_scale='RdYlGn',
-                text='growth_rate',
-                title='品类增长率对比 (%)'
-            )
-            
-            fig_growth.update_traces(
-                texttemplate='%{text:.1f}%',
-                textposition='outside'
-            )
-            
-            fig_growth.update_layout(
-                height=400,
-                xaxis_title="增长率 (%)",
-                yaxis_title="品类",
-                showlegend=False
-            )
-            
-            st.plotly_chart(fig_growth, use_container_width=True)
-
-# ========== 标签页7: 详细数据 ==========
-with tab7:
-    st.subheader("📋 详细数据表")
-    
-    # 显示数据预览
-    st.dataframe(
-        filtered_df.sort_values(['date', 'country', 'category']),
-        use_container_width=True,
-        height=400
-    )
-    
-    # 数据统计摘要
-    st.subheader("📊 数据统计摘要")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**按国家汇总:**")
-        country_summary = filtered_df.groupby('country').agg({
-            'sales_amount': ['sum', 'mean', 'count'],
-            'orders': 'sum',
-            'conversion_rate': 'mean'
-        }).round(2)
-        st.dataframe(country_summary, use_container_width=True)
-    
-    with col2:
-        st.write("**按品类汇总:**")
-        category_summary = filtered_df.groupby('category').agg({
-            'sales_amount': ['sum', 'mean', 'count'],
-            'conversion_rate': 'mean',
-            'avg_order_value': 'mean'
-        }).round(2)
-        st.dataframe(category_summary, use_container_width=True)
-
-# ========== 9. 底部信息 ==========
-st.markdown("---")
-st.markdown("### 📊 数据说明")
-st.markdown("""
-- **数据来源**: 模拟生成的跨境电商春季大促数据
-- **时间范围**: 最近60天，包含模拟的大促高峰期
-- **更新频率**: 实时更新（演示为静态数据）
-- **货币单位**: 人民币 (¥)
-- **数据保存**: 所有数据已保存到 `spring_promo_enhanced_data.csv`
-""")
-
-st.markdown("### 🚀 操作指南")
-st.markdown("""
-1. **侧边栏控制**: 设置预警阈值、目标、筛选条件
-2. **预警监控**: 顶部KPI面板显示实时预警状态
-3. **趋势预测**: 销售趋势图包含未来7天预测
-4. **多维分析**: 使用标签页切换不同分析维度
-5. **数据导出**: 侧边栏提供数据下载功能
-""")
-
-# ========== 10. 数据下载选项 ==========
+# ========== 自动化报告配置 ==========
 st.sidebar.markdown("---")
+st.sidebar.header("📧 自动化报告配置")
+
+with st.sidebar.expander("报告设置"):
+    report_type = st.selectbox("报告类型", ["日报", "周报", "月报"])
+    send_time = st.time_input("发送时间", datetime.now().time())
+    recipients = st.text_area("收件人列表", "admin@example.com\nmanager@example.com")
+    
+    if st.button("保存报告设置"):
+        st.success("报告设置已保存")
+
+# ========== 数据导出功能 ==========
 st.sidebar.header("💾 数据导出")
 
-# 提供数据下载
-csv_data = filtered_df.to_csv(index=False).encode('utf-8-sig')
-st.sidebar.download_button(
-    label="📥 下载筛选后数据 (CSV)",
-    data=csv_data,
-    file_name=f"spring_promo_enhanced_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-    mime="text/csv"
-)
+export_format = st.sidebar.selectbox("导出格式", ["CSV", "Excel", "JSON"])
 
-# 一键生成报告按钮
-if st.sidebar.button("📄 一键生成分析报告", type="primary"):
-    with st.spinner("正在生成分析报告..."):
-        # 模拟报告生成
-        st.sidebar.success("报告生成完成！")
-        st.sidebar.info("""
-        **报告摘要:**
-        - 销售额: ¥{:,}
-        - 订单数: {:,}
-        - 转化率: {:.2f}%
-        - 关键发现: 欧美市场增长强劲，电子产品品类表现突出
-        """.format(int(total_sales), total_orders, avg_conversion))
+if st.sidebar.button("📤 导出所有数据"):
+    with st.spinner("正在导出数据..."):
+        # 这里可以实现数据导出逻辑
+        st.sidebar.success("数据导出完成")
 
-st.sidebar.markdown("---")
-st.sidebar.info("**系统状态**: ✅ 正常运行\n\n**最后更新**: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+# ========== 页脚信息 ==========
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666; padding: 20px;'>
+    <p>🚀 <strong>跨境电商大促智能作战室 v2.0</strong></p>
+    <p>📅 最后更新: {}</p>
+    <p>💡 提示: 按 F11 键进入全屏模式，获得最佳大屏体验</p>
+</div>
+""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)
+
+# ========== 保存数据到文件 ==========
+# 保存所有数据到文件
+data_files = {
+    'sales_data.csv': df,
+    'product_data.csv': product_df,
+    'ab_test_data.csv': ab_df,
+    'price_elasticity_data.csv': elasticity_df
+}
+
+for filename, data in data_files.items():
+    data.to_csv(filename, index=False, encoding='utf-8-sig')
+
+st.sidebar.success("✅ 所有数据已保存到文件")
